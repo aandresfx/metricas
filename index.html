@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MT5 Analytics Dashboard</title>
+    <title>Métricas MT5</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
@@ -18,25 +18,26 @@
 <body class="flex h-screen overflow-hidden">
     <aside class="w-64 bg-dark border-r border-panel flex flex-col">
         <div class="p-6 flex items-center gap-3">
-            <div class="w-8 h-8 bg-accent rounded-lg flex items-center justify-center font-bold">TB</div>
-            <span class="text-xl font-bold">Trade Analytics</span>
+            <div class="w-8 h-8 bg-accent rounded-lg flex items-center justify-center font-bold">M</div>
+            <span class="text-xl font-bold">Métricas</span>
         </div>
         <nav class="flex-1 px-4 space-y-2">
-            <a href="#" class="flex items-center gap-3 px-3 py-2 bg-panel text-accent rounded-lg"><i data-lucide="home" class="w-5 h-5"></i> Dashboard</a>
-            <a href="#" class="flex items-center gap-3 px-3 py-2 text-gray-400 hover:text-white rounded-lg"><i data-lucide="list" class="w-5 h-5"></i> Trades</a>
-            <a href="#" class="flex items-center gap-3 px-3 py-2 text-gray-400 hover:text-white rounded-lg"><i data-lucide="bar-chart-2" class="w-5 h-5"></i> Análisis</a>
+            <a href="#" data-view="dashboard" onclick="showView('dashboard');return false;" class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg"><i data-lucide="home" class="w-5 h-5"></i> Panel</a>
+            <a href="#" data-view="trades" onclick="showView('trades');return false;" class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg"><i data-lucide="list" class="w-5 h-5"></i> Inversiones</a>
+            <a href="#" data-view="analisis" onclick="showView('analisis');return false;" class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg"><i data-lucide="bar-chart-2" class="w-5 h-5"></i> Análisis</a>
         </nav>
     </aside>
     <main class="flex-1 overflow-y-auto p-8">
         <div class="flex justify-between items-center mb-8">
             <div>
                 <h1 class="text-2xl font-bold">Análisis de Estrategias</h1>
-                <p class="text-gray-400 text-sm">Importa tus reportes de MT5 para comparar sistemas.</p>
+                <p class="text-gray-400 text-sm">Importa tus informes de MT5 para comparar sistemas.</p>
             </div>
             <div class="flex gap-4">
+                <select id="strategySelect" onchange="activeIdx=+this.value;tradePage=0;updateDashboard();" class="hidden bg-panel border border-panel text-white rounded-lg px-3 py-2 text-sm"></select>
                 <input type="file" id="fileInput" multiple accept=".html,.htm" class="hidden">
                 <button onclick="document.getElementById('fileInput').click()" class="bg-accent hover:bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors">
-                    <i data-lucide="upload" class="w-4 h-4"></i> Importar Reportes (HTML)
+                    <i data-lucide="upload" class="w-4 h-4"></i> Importar informes (HTML)
                 </button>
             </div>
         </div>
@@ -49,11 +50,11 @@
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4" id="kpiGrid"></div>
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div class="glass-panel p-6">
-                    <h3 class="text-lg font-semibold mb-4">Curva de Capital (Equity)</h3>
+                    <h3 class="text-lg font-semibold mb-4">Curva de capital (equidad)</h3>
                     <canvas id="equityChart"></canvas>
                 </div>
                 <div class="glass-panel p-6">
-                    <h3 class="text-lg font-semibold mb-4">P&L por Día de la Semana</h3>
+                    <h3 class="text-lg font-semibold mb-4">Resultado por día de la semana</h3>
                     <canvas id="weekdayChart"></canvas>
                 </div>
             </div>
@@ -64,15 +65,41 @@
                         <tr>
                             <th class="px-4 py-3">Estrategia / Archivo</th>
                             <th class="px-4 py-3">Beneficio Neto</th>
-                            <th class="px-4 py-3">Total Trades</th>
-                            <th class="px-4 py-3">Win Rate</th>
-                            <th class="px-4 py-3">Profit Factor</th>
-                            <th class="px-4 py-3">Max Drawdown</th>
-                            <th class="px-4 py-3">Expectativa</th>
+                            <th class="px-4 py-3">Operaciones</th>
+                            <th class="px-4 py-3">Tasa de acierto</th>
+                            <th class="px-4 py-3">Factor de beneficio</th>
+                            <th class="px-4 py-3">Reducción máxima</th>
+                            <th class="px-4 py-3">Beneficio esperado</th>
                         </tr>
                     </thead>
                     <tbody id="summaryTableBody"></tbody>
                 </table>
+            </div>
+        </div>
+        <div id="view-trades" class="hidden">
+            <div class="flex justify-between items-center mb-4">
+                <div><h2 class="text-xl font-bold">Inversiones</h2><p id="tradesCount" class="text-gray-400 text-sm"></p></div>
+                <div class="flex gap-2">
+                    <button id="prevBtn" onclick="changePage(-1)" class="bg-panel px-3 py-1 rounded-lg text-sm disabled:opacity-40">Anterior</button>
+                    <button id="nextBtn" onclick="changePage(1)" class="bg-panel px-3 py-1 rounded-lg text-sm disabled:opacity-40">Siguiente</button>
+                </div>
+            </div>
+            <div class="glass-panel overflow-x-auto">
+                <table class="w-full text-left text-sm text-gray-300">
+                    <thead class="text-xs uppercase bg-panel text-gray-400"><tr>
+                        <th class="px-4 py-3">Símbolo</th><th class="px-4 py-3">Dirección</th><th class="px-4 py-3 text-right">Volumen</th>
+                        <th class="px-4 py-3">Apertura</th><th class="px-4 py-3">Cierre</th><th class="px-4 py-3 text-right">Precio ap.</th><th class="px-4 py-3 text-right">Precio cierre</th>
+                        <th class="px-4 py-3 text-right">Beneficio</th><th class="px-4 py-3 text-right">Comisión</th><th class="px-4 py-3 text-right">Swap</th><th class="px-4 py-3 text-right">Beneficio neto</th><th class="px-4 py-3">Comentario</th>
+                    </tr></thead>
+                    <tbody id="tradesBody"></tbody>
+                </table>
+            </div>
+        </div>
+        <div id="view-analisis" class="hidden space-y-8">
+            <div><h2 class="text-xl font-bold">Análisis</h2><p class="text-gray-400 text-sm">Desglose del rendimiento de las operaciones.</p></div>
+            <div class="glass-panel p-6 overflow-x-auto">
+                <h3 class="text-lg font-semibold mb-4">Resultado mensual <span class="text-xs text-gray-500 font-normal">(% sobre el depósito inicial)</span></h3>
+                <table id="monthlyTable" class="w-full text-center text-sm border-separate" style="border-spacing:2px"></table>
             </div>
         </div>
     </main>
@@ -83,6 +110,9 @@
         let equityChart = null;
         let weekdayChart = null;
         let loadedData = [];
+        let activeIdx = 0, currentView = 'dashboard', tradePage = 0;
+        const cur = () => loadedData[activeIdx];
+        const VIEWS = { dashboard: 'dashboard', trades: 'view-trades', analisis: 'view-analisis' };
         const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
         const formatCurrency = (val) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(val);
 
@@ -102,10 +132,12 @@
                 }
             }
             if (loadedData.length) {
-                document.getElementById('emptyState').classList.add('hidden');
-                document.getElementById('dashboard').classList.remove('hidden');
+                activeIdx = 0; tradePage = 0;
+                const sel = document.getElementById('strategySelect');
+                sel.innerHTML = loadedData.map((d, i) => `<option value="${i}">${d.fileName}</option>`).join('');
                 updateDashboard();
             }
+            showView(currentView);
             e.target.value = '';
         });
 
@@ -193,7 +225,12 @@ async function readReportFile(file) {
                             timeIdx: Math.max(0, heads.findIndex(h => /^(time|hora|fecha)/.test(h))),
                             typeIdx: heads.findIndex(h => h === 'type' || h === 'tipo'),
                             commIdx: heads.findIndex(h => h === 'commission' || h === 'comision'),
-                            swapIdx: heads.findIndex(h => h === 'swap')
+                            swapIdx: heads.findIndex(h => h === 'swap'),
+                            symIdx: heads.findIndex(h => h === 'symbol' || h === 'simbolo'),
+                            dirIdx: heads.findIndex(h => h === 'direction' || h === 'direccion'),
+                            volIdx: heads.findIndex(h => /^volum/.test(h)),
+                            priceIdx: heads.findIndex(h => h === 'price' || h === 'precio'),
+                            cmtIdx: heads.findIndex(h => h === 'comment' || h === 'comentario')
                         };
                         break;
                     }
@@ -218,7 +255,11 @@ async function readReportFile(file) {
                         if (found.commIdx !== -1 && c[found.commIdx]) pnl += parseNum(c[found.commIdx].textContent);
                         if (found.swapIdx !== -1 && c[found.swapIdx]) pnl += parseNum(c[found.swapIdx].textContent);
                     }
-                    deals.push({ time: timeStr, profit: pnl, balance });
+                    const g = i => (i !== -1 && c[i]) ? c[i].textContent.trim() : '';
+                    const num = i => (i !== -1 && c[i]) ? parseNum(c[i].textContent) : 0;
+                    deals.push({ time: timeStr, profit: pnl, balance, type, dir: norm(g(found.dirIdx)), symbol: g(found.symIdx),
+                        volume: num(found.volIdx), price: num(found.priceIdx), rawProfit: isDeposit ? 0 : num(found.profitIdx),
+                        commission: num(found.commIdx), swap: num(found.swapIdx), comment: g(found.cmtIdx) });
                 }
             } else {
                 console.warn('[MT5] No se encontró la tabla de transacciones');
@@ -231,28 +272,117 @@ async function readReportFile(file) {
             }
 
             console.log('[MT5]', fileName, { netProfit, totalTrades, profitFactor, maxDrawdown, winRate, expectancy, deals: deals.length });
-            return { fileName, netProfit, totalTrades, profitFactor, maxDrawdown, winRate, expectancy, deals };
+            // Une cada transacción de entrada con su salida (FIFO por símbolo) para formar las operaciones
+            const trades = [], abiertas = {};
+            deals.forEach(d => {
+                if (d.type === 'balance' || !d.symbol) return;
+                if (d.dir === 'in' || d.dir === 'entrada') (abiertas[d.symbol] ||= []).push(d);
+                else if (d.dir === 'out' || d.dir === 'salida' || d.dir === 'in/out') {
+                    const o = (abiertas[d.symbol] || []).shift() || null;
+                    trades.push({
+                        symbol: d.symbol, direction: o ? (o.type === 'buy' ? 'Largo' : 'Corto') : (d.type === 'buy' ? 'Corto' : 'Largo'),
+                        volume: d.volume, openTime: o ? o.time : '', closeTime: d.time, openPrice: o ? o.price : 0, closePrice: d.price,
+                        profit: d.rawProfit, commission: d.commission + (o ? o.commission : 0), swap: d.swap + (o ? o.swap : 0),
+                        net: d.profit + (o ? o.profit : 0), comment: d.comment || (o ? o.comment : '')
+                    });
+                }
+            });
+            const first = deals[0];
+            const initial = first ? (first.type === 'balance' ? first.balance : first.balance - first.profit) : 0;
+            return { fileName, netProfit, totalTrades, profitFactor, maxDrawdown, winRate, expectancy, deals, trades, initial };
+        }
+
+        function showView(v) {
+            currentView = v;
+            const has = loadedData.length > 0;
+            document.getElementById('emptyState').classList.toggle('hidden', has);
+            Object.entries(VIEWS).forEach(([k, id]) => document.getElementById(id).classList.toggle('hidden', !has || k !== v));
+            document.getElementById('strategySelect').classList.toggle('hidden', loadedData.length < 2);
+            document.querySelectorAll('.nav-link').forEach(a => {
+                const on = a.dataset.view === v;
+                a.classList.toggle('bg-panel', on); a.classList.toggle('text-accent', on);
+                a.classList.toggle('text-gray-400', !on); a.classList.toggle('hover:text-white', !on);
+            });
+            if (has && v === 'dashboard') { updateEquityChart(); updateWeekdayChart(); } // el lienzo debe estar visible para medirse
         }
 
         function updateDashboard() {
             updateKPIs();
             updateSummaryTable();
-            updateEquityChart();
-            updateWeekdayChart();
+            updateTradesTable();
+            updateMonthly();
+            if (currentView === 'dashboard') { updateEquityChart(); updateWeekdayChart(); }
+        }
+
+        function changePage(n) { tradePage += n; updateTradesTable(); }
+
+        function updateTradesTable() {
+            const d = cur(); if (!d) return;
+            const rows = [...d.trades].reverse(), PS = 200; // más recientes primero
+            const pages = Math.max(1, Math.ceil(rows.length / PS));
+            tradePage = Math.max(0, Math.min(tradePage, pages - 1));
+            const slice = rows.slice(tradePage * PS, (tradePage + 1) * PS);
+            const col = v => v >= 0 ? 'text-success' : 'text-danger';
+            const f = v => formatCurrency(v);
+            document.getElementById('tradesCount').textContent = `${rows.length ? tradePage * PS + 1 : 0}–${tradePage * PS + slice.length} de ${rows.length} operaciones`;
+            document.getElementById('prevBtn').disabled = tradePage === 0;
+            document.getElementById('nextBtn').disabled = tradePage >= pages - 1;
+            document.getElementById('tradesBody').innerHTML = slice.map(t => `
+                <tr class="border-b border-panel hover:bg-panel/50 whitespace-nowrap">
+                    <td class="px-4 py-3 font-medium text-white">${t.symbol}</td>
+                    <td class="px-4 py-3"><span class="px-2 py-0.5 rounded text-xs font-semibold ${t.direction === 'Largo' ? 'bg-success/20 text-success' : 'bg-danger/20 text-danger'}">${t.direction}</span></td>
+                    <td class="px-4 py-3 text-right">${t.volume.toFixed(2)}</td>
+                    <td class="px-4 py-3">${t.openTime}</td><td class="px-4 py-3">${t.closeTime}</td>
+                    <td class="px-4 py-3 text-right">${t.openPrice}</td><td class="px-4 py-3 text-right">${t.closePrice}</td>
+                    <td class="px-4 py-3 text-right ${col(t.profit)}">${f(t.profit)}</td>
+                    <td class="px-4 py-3 text-right text-gray-500">${f(t.commission)}</td>
+                    <td class="px-4 py-3 text-right ${t.swap < 0 ? 'text-danger' : 'text-gray-500'}">${f(t.swap)}</td>
+                    <td class="px-4 py-3 text-right font-semibold ${col(t.net)}">${f(t.net)}</td>
+                    <td class="px-4 py-3 text-gray-500">${t.comment}</td>
+                </tr>`).join('');
+        }
+
+        function updateMonthly() {
+            const d = cur(), el = document.getElementById('monthlyTable'); if (!d) return;
+            const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+            const by = {};
+            d.deals.forEach(x => {
+                const m = (x.time || '').match(/^(\d{4})\.(\d{2})/);
+                if (!m || x.type === 'balance') return;
+                by[m[1]] ||= Array(12).fill(null);
+                by[m[1]][+m[2] - 1] = (by[m[1]][+m[2] - 1] || 0) + x.profit;
+            });
+            const years = Object.keys(by).sort();
+            const sum = a => a.reduce((t, v) => t + (v || 0), 0);
+            const colTot = Array.from({ length: 12 }, (_, i) => years.some(y => by[y][i] !== null) ? sum(years.map(y => by[y][i])) : null);
+            const grand = sum(colTot);
+            const max = Math.max(1, ...years.flatMap(y => by[y].filter(v => v !== null).map(Math.abs)));
+            const money = v => (v >= 0 ? '+' : '-') + new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(Math.abs(v));
+            const cell = (v, big) => {
+                if (v === null) return '<td class="px-3 py-3 text-gray-600" style="background:#0f172a">–</td>';
+                const a = (0.1 + 0.3 * Math.min(1, Math.abs(v) / (big || max))).toFixed(2);
+                const bg = v >= 0 ? `rgba(16,185,129,${a})` : `rgba(239,68,68,${a})`;
+                const pct = d.initial ? (v / d.initial * 100) : 0;
+                return `<td class="px-3 py-3 ${v >= 0 ? 'text-success' : 'text-danger'}" style="background:${bg}"><div class="font-bold">${money(v)}</div><div class="text-xs opacity-70">${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%</div></td>`;
+            };
+            const head = `<tr class="text-xs text-gray-400 uppercase"><th></th>${meses.map(m => `<th class="py-2">${m}</th>`).join('')}<th>Total</th></tr>`;
+            const body = years.map(y => `<tr><th class="px-3 text-white">${y}</th>${by[y].map(v => cell(v)).join('')}${cell(sum(by[y]), max * 4)}</tr>`).join('');
+            const foot = `<tr><th class="px-3 text-white">Total</th>${colTot.map(v => cell(v, max * 2)).join('')}${cell(grand, max * 4)}</tr>`;
+            el.innerHTML = head + body + foot;
         }
 
         function updateKPIs() {
             const kpiGrid = document.getElementById('kpiGrid');
             kpiGrid.innerHTML = '';
-            const d = loadedData[0];
+            const d = cur();
             if (!d) return;
             const kpis = [
                 { label: 'Beneficio Neto', value: formatCurrency(d.netProfit), color: d.netProfit >= 0 ? 'text-success' : 'text-danger' },
-                { label: 'Total Trades', value: d.totalTrades, color: 'text-white' },
-                { label: 'Win Rate', value: d.winRate.toFixed(2) + '%', color: 'text-white' },
-                { label: 'Profit Factor', value: d.profitFactor.toFixed(2), color: 'text-white' },
-                { label: 'Max Drawdown', value: formatCurrency(d.maxDrawdown), color: 'text-danger' },
-                { label: 'Expectativa', value: formatCurrency(d.expectancy), color: d.expectancy >= 0 ? 'text-success' : 'text-danger' },
+                { label: 'Operaciones', value: d.totalTrades, color: 'text-white' },
+                { label: 'Tasa de acierto', value: d.winRate.toFixed(2) + '%', color: 'text-white' },
+                { label: 'Factor de beneficio', value: d.profitFactor.toFixed(2), color: 'text-white' },
+                { label: 'Reducción máxima', value: formatCurrency(d.maxDrawdown), color: 'text-danger' },
+                { label: 'Beneficio esperado', value: formatCurrency(d.expectancy), color: d.expectancy >= 0 ? 'text-success' : 'text-danger' },
             ];
             kpis.forEach(k => {
                 kpiGrid.innerHTML += `<div class="glass-panel p-5"><div class="text-sm text-gray-400 mb-1">${k.label}</div><div class="text-2xl font-bold ${k.color}">${k.value}</div></div>`;
@@ -299,7 +429,7 @@ async function readReportFile(file) {
             const ctx = document.getElementById('weekdayChart').getContext('2d');
             const days = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
             const pnl = [0, 0, 0, 0, 0, 0, 0];
-            const data = loadedData[0];
+            const data = cur();
             if (!data) return;
             data.deals.forEach(deal => {
                 const m = (deal.time || '').match(/(\d{4})\.(\d{2})\.(\d{2})/);
@@ -310,7 +440,7 @@ async function readReportFile(file) {
             if (weekdayChart) weekdayChart.destroy();
             weekdayChart = new Chart(ctx, {
                 type: 'bar',
-                data: { labels: days, datasets: [{ label: 'P&L por Día', data: pnl, backgroundColor: pnl.map(v => v >= 0 ? '#10b981' : '#ef4444'), borderRadius: 4 }] },
+                data: { labels: days, datasets: [{ label: 'Resultado', data: pnl, backgroundColor: pnl.map(v => v >= 0 ? '#10b981' : '#ef4444'), borderRadius: 4 }] },
                 options: {
                     responsive: true, plugins: { legend: { display: false } },
                     scales: { x: { grid: { display: false }, ticks: { color: '#94a3b8' } }, y: { grid: { color: '#1e293b' }, ticks: { color: '#94a3b8' } } }
