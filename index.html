@@ -84,6 +84,7 @@
                 <div class="glass-panel p-6">
                     <h3 class="text-lg font-semibold mb-4">P&L por Día de la Semana</h3>
                     <canvas id="weekdayChart"></canvas>
+                    <p class="text-xs text-gray-500 mt-2 text-center" id="weekdayNote"></p>
                 </div>
             </div>
 
@@ -123,6 +124,9 @@
             const files = e.target.files;
             if (files.length === 0) return;
 
+            // Limpiamos datos anteriores para evitar duplicados en las gráficas
+            loadedData = []; 
+            
             document.getElementById('emptyState').classList.add('hidden');
             document.getElementById('dashboard').classList.remove('hidden');
 
@@ -130,6 +134,7 @@
                 const file = files[i];
                 const text = await file.text();
                 const parsedData = parseMT5Report(text, file.name);
+                
                 if(parsedData) {
                     parsedData.color = colors[loadedData.length % colors.length];
                     loadedData.push(parsedData);
@@ -137,134 +142,67 @@
             }
             
             updateDashboard();
-            // Limpiar input para permitir subir el mismo archivo de nuevo si es necesario
-            e.target.value = '';
+            e.target.value = ''; // Permitir subir el mismo archivo de nuevo
         });
 
         function parseMT5Report(htmlString, fileName) {
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(htmlString, "text/html");
-            
-            // Función auxiliar robusta: busca en las filas (tr) y celdas (td)
-            const getValue = (labelES, labelEN) => {
-                const rows = Array.from(doc.querySelectorAll('tr'));
-                for (let row of rows) {
-                    const cells = Array.from(row.querySelectorAll('td'));
-                    for (let i = 0; i < cells.length; i++) {
-                        // Reemplazamos saltos de línea y espacios múltiples por un solo espacio
-                        const text = cells[i].textContent.replace(/\s+/g, ' ').trim();
-                        if (text.includes(labelES) || text.includes(labelEN)) {
-                            // El valor suele estar en la celda inmediatamente a la derecha
-                            if (cells[i+1]) {
-                                return cells[i+1].textContent.replace(/\s+/g, ' ').trim();
-                            }
-                        }
-                    }
-                }
-                return "0";
+            // 1. Función de búsqueda Regex (Infalible contra HTML mal cerrado)
+            // Escapa los caracteres especiales del label (como los paréntesis)
+            const escapeRegExp = (string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+            const extractValue = (html, labelES, labelEN) => {
+                const regexES = new RegExp(escapeRegExp(labelES) + '[\\s\\S]*?<b>([^<]+)<\\/b>', 'i');
+                const regexEN = new RegExp(escapeRegExp(labelEN) + '[\\s\\S]*?<b>([^<]+)<\\/b>', 'i');
+                
+                let match = html.match(regexES) || html.match(regexEN);
+                return match ? match[1].trim() : "0";
             };
 
             // Función para limpiar strings numéricos de MT5
             const parseNum = (str, isPercent = false) => {
-                if (!str || str === '0' || str === '') return 0;
+                if (!str || str === '0') return 0;
                 if (isPercent) {
-                    const match = str.match(/([\d.,\s]+)%/);
+                    const match = str.match(/([\d.,]+)%/);
                     if (match) str = match[1];
                 }
                 
-                // Quitar todos los espacios
+                // Quitar todos los espacios (ej: "45 425.46" -> "45425.46")
                 let cleanStr = str.replace(/\s/g, '');
                 
-                // Detectar formato (Europeo: 1.000,50 vs Americano: 1,000.50)
+                // Manejo de comas y puntos (Formato Europeo vs Americano)
                 if (cleanStr.includes(',') && cleanStr.includes('.')) {
                     if (cleanStr.lastIndexOf(',') > cleanStr.lastIndexOf('.')) {
-                        // Europeo
                         cleanStr = cleanStr.replace(/\./g, '').replace(',', '.');
                     } else {
-                        // Americano
                         cleanStr = cleanStr.replace(/,/g, '');
                     }
                 } else if (cleanStr.includes(',')) {
-                    // Solo coma, asumimos decimal
                     cleanStr = cleanStr.replace(',', '.');
                 }
                 
-                // Quitar caracteres extraños
                 cleanStr = cleanStr.replace(/[^\d.-]/g, '');
                 return parseFloat(cleanStr) || 0;
             };
 
-            // Extraer métricas principales
-            const netProfit = parseNum(getValue('Beneficio Neto:', 'Net Profit:'));
-            const totalTrades = parseNum(getValue('Total de operaciones ejecutadas:', 'Total Trades:'));
-            const profitFactor = parseNum(getValue('Factor de Beneficio:', 'Profit Factor:'));
-            const maxDrawdown = parseNum(getValue('Reducción máxima de la equidad:', 'Maximal drawdown:'));
-            const winRate = parseNum(getValue('Posiciones rentables (% del total):', 'Profit Trades (% of total):'), true);
-            const expectancy = parseNum(getValue('Beneficio Esperado:', 'Expected Payoff:'));
-
-            // Extraer Transacciones (Deals) para la Curva de Capital
-            let deals = [];
-            const tables = doc.querySelectorAll('table');
-            let dealsTable = null;
+            // Extraer métricas usando Regex
+            const netProfit = parseNum(extractValue(htmlString, 'Beneficio Neto:', 'Net Profit:'));
+            const totalTrades = parseNum(extractValue(htmlString, 'Total de operaciones ejecutadas:', 'Total Trades:'));
+            const profitFactor = parseNum(extractValue(htmlString, 'Factor de Beneficio:', 'Profit Factor:'));
+            const maxDrawdown = parseNum(extractValue(htmlString, 'Reducción máxima de la equidad:', 'Maximal drawdown:'));
             
-            // Buscar tabla de Transacciones
-            for (let table of tables) {
-                const text = table.textContent;
-                if (text.includes('Transacciones') || text.includes('Deals')) {
-                    dealsTable = table;
-                    break;
-                }
-            }
+            // El Win Rate viene como "129 (57.33%)", extraemos solo el %
+            const winRateStr = extractValue(htmlString, 'Posiciones rentables \\(% del total\\):', 'Profit Trades \\(% of total\\):');
+            const winRate = parseNum(winRateStr, true);
+            
+            const expectancy = parseNum(extractValue(htmlString, 'Beneficio Esperado:', 'Expected Payoff:'));
+            const initialDeposit = parseNum(extractValue(htmlString, 'Depósito inicial:', 'Initial deposit:')) || 10000;
 
-            if (dealsTable) {
-                const rows = dealsTable.querySelectorAll('tr');
-                let headerRow = null;
-                let profitIdx = -1;
-                let timeIdx = 0;
-
-                for (let row of rows) {
-                    const texts = Array.from(row.querySelectorAll('td')).map(td => td.textContent.trim());
-                    if (texts.includes('Beneficio') || texts.includes('Profit')) {
-                        headerRow = row;
-                        texts.forEach((txt, idx) => {
-                            if (txt === 'Beneficio' || txt === 'Profit') profitIdx = idx;
-                            if (txt === 'Hora' || txt === 'Time') timeIdx = idx;
-                        });
-                        break;
-                    }
-                }
-
-                if (profitIdx !== -1 && headerRow) {
-                    let currentBalance = 0;
-                    let isAfterHeader = false;
-                    for (let row of rows) {
-                        if (row === headerRow) {
-                            isAfterHeader = true;
-                            continue;
-                        }
-                        if (!isAfterHeader) continue;
-
-                        const cells = Array.from(row.querySelectorAll('td'));
-                        if (cells.length > profitIdx) {
-                            const profitStr = cells[profitIdx].textContent.trim();
-                            if (profitStr !== '') {
-                                const profit = parseNum(profitStr);
-                                currentBalance += profit;
-                                deals.push({
-                                    time: cells[timeIdx] ? cells[timeIdx].textContent.trim() : '',
-                                    profit: profit,
-                                    balance: currentBalance
-                                });
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Si el reporte no tiene tabla de transacciones (solo órdenes), creamos un punto simple
-            if (deals.length === 0) {
-                deals.push({ time: '', profit: netProfit, balance: netProfit });
-            }
+            // --- CURVA DE CAPITAL ---
+            // Como el reporte no incluye la tabla de "Transacciones" (Deals), 
+            // creamos una curva simple usando el Balance Inicial y el Beneficio Neto final.
+            let deals = [];
+            deals.push({ time: 'Inicio', profit: 0, balance: initialDeposit });
+            deals.push({ time: 'Fin', profit: netProfit, balance: initialDeposit + netProfit });
 
             return {
                 fileName,
@@ -274,7 +212,8 @@
                 maxDrawdown,
                 winRate,
                 expectancy,
-                deals
+                deals,
+                hasDetailedDeals: false // Bandera para saber si podemos mostrar el gráfico semanal
             };
         }
 
@@ -341,15 +280,9 @@
             const ctx = document.getElementById('equityChart').getContext('2d');
             
             const datasets = loadedData.map(data => {
-                let balance = 0;
-                const dataPoints = data.deals.map(d => {
-                    balance += d.profit;
-                    return balance;
-                });
-
                 return {
                     label: data.fileName,
-                    data: dataPoints,
+                    data: data.deals.map(d => d.balance), // Usamos los puntos de balance
                     borderColor: data.color,
                     backgroundColor: data.color + '20',
                     borderWidth: 2,
@@ -364,7 +297,8 @@
             equityChart = new Chart(ctx, {
                 type: 'line',
                 data: {
-                    labels: loadedData[0]?.deals.map((_, i) => i + 1) || [], 
+                    // Como no tenemos puntos medios, solo mostramos 2 (Inicio y Fin)
+                    labels: ['Inicio', 'Fin'], 
                     datasets: datasets
                 },
                 options: {
@@ -383,34 +317,21 @@
 
         function updateWeekdayChart() {
             const ctx = document.getElementById('weekdayChart').getContext('2d');
+            const note = document.getElementById('weekdayNote');
             
-            const days = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
-            const weekdayPnL = [0, 0, 0, 0, 0, 0, 0];
-
-            const data = loadedData[0];
-            if(!data) return;
-
-            data.deals.forEach(deal => {
-                if (!deal.time) return; 
-                const dateStr = deal.time.split(' ')[0];
-                const date = new Date(dateStr.replace(/\./g, '-'));
-                if(!isNaN(date.getTime())) {
-                    let dayIndex = date.getDay() - 1; 
-                    if(dayIndex < 0) dayIndex = 6; 
-                    weekdayPnL[dayIndex] += deal.profit;
-                }
-            });
-
+            // Si el reporte no tiene la tabla detallada de Deals, no podemos graficar los días
+            note.textContent = "⚠️ Este reporte no incluye la tabla de 'Transacciones' detalladas. Exporta el reporte con la opción 'Reporte detallado' en MT5 para ver esta gráfica.";
+            
             if (weekdayChart) weekdayChart.destroy();
 
             weekdayChart = new Chart(ctx, {
                 type: 'bar',
                 data: {
-                    labels: days,
+                    labels: ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'],
                     datasets: [{
                         label: 'P&L por Día',
-                        data: weekdayPnL,
-                        backgroundColor: weekdayPnL.map(val => val >= 0 ? '#10b981' : '#ef4444'),
+                        data: [0, 0, 0, 0, 0, 0, 0],
+                        backgroundColor: '#1e293b',
                         borderRadius: 4
                     }]
                 },
